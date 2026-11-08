@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Fenster-Timer | @GutachterKail</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.35);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.5rem 1rem;
+      text-align: center;
+    }
+    header { margin-top: 0.5rem; }
+    h1 { font-size: 1.5rem; font-weight: 700; }
+    .badge {
+      display: inline-block;
+      margin-top: 0.35rem;
+      padding: 0.2rem 0.6rem;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .timer-container {
+      position: relative;
+      width: 260px;
+      height: 260px;
+      margin: 1.5rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .timer-svg {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      transform: rotate(-90deg);
+    }
+    .timer-circle-bg { fill: none; stroke: var(--card-bg); stroke-width: 12; }
+    .timer-circle-progress {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 12;
+      stroke-linecap: round;
+      stroke-dasharray: 754;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear;
+      filter: drop-shadow(0 0 10px var(--accent-glow));
+    }
+    .timer-display { position: relative; z-index: 10; }
+    .time-digits { font-size: 3.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .time-status { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem; }
+    .controls { display: flex; flex-direction: column; gap: 0.75rem; width: 100%; max-width: 320px; }
+    .preset-group { display: flex; gap: 0.5rem; justify-content: center; }
+    button {
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      border-radius: 12px;
+      touch-action: manipulation;
+    }
+    .btn-preset {
+      flex: 1;
+      padding: 0.65rem 0;
+      background: var(--card-bg);
+      color: var(--text);
+      font-size: 0.85rem;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .btn-preset.active { background: var(--accent); color: #04121e; font-weight: 700; }
+    .btn-main {
+      padding: 0.9rem 0;
+      font-size: 1.05rem;
+      background: var(--accent);
+      color: #04121e;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+    .btn-reset {
+      padding: 0.5rem 0;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    .alarm-box {
+      display: none;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+      padding: 0.75rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    footer { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="badge">Stoßlüftung</div>
+    <h1>Fenster-Timer</h1>
+  </header>
+
+  <div class="timer-container">
+    <svg class="timer-svg" viewBox="0 0 260 260">
+      <circle class="timer-circle-bg" cx="130" cy="130" r="120"></circle>
+      <circle class="timer-circle-progress" id="progressCircle" cx="130" cy="130" r="120"></circle>
+    </svg>
+    <div class="timer-display">
+      <div class="time-digits" id="timeDisplay">05:00</div>
+      <div class="time-status" id="statusDisplay">Tippe auf Start</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="alarm-box" id="alarmNotice">⚠️ Zeit abgelaufen! Bitte Fenster schließen.</div>
+    <div class="preset-group">
+      <button class="btn-preset" onclick="setPreset(180)">3 Min</button>
+      <button class="btn-preset active" onclick="setPreset(300)">5 Min</button>
+      <button class="btn-preset" onclick="setPreset(480)">8 Min</button>
+    </div>
+    <button class="btn-main" id="btnToggle" onclick="toggleTimer()">Timer starten</button>
+    <button class="btn-reset" onclick="resetTimer()">Zurücksetzen</button>
+  </div>
+
+  <footer>@GutachterKail</footer>
+
+  <script>
+    const CIRCLE_CIRCUMFERENCE = 754;
+    let initialSeconds = 300;
+    let remainingSeconds = 300;
+    let timerInterval = null;
+
+    const timeDisplay = document.getElementById("timeDisplay");
+    const statusDisplay = document.getElementById("statusDisplay");
+    const progressCircle = document.getElementById("progressCircle");
+    const btnToggle = document.getElementById("btnToggle");
+    const alarmNotice = document.getElementById("alarmNotice");
+
+    function playBeep() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.5, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
+        osc.start();
+        osc.stop(ctx.currentTime + 1);
+      } catch(e) {}
+    }
+
+    function updateDisplay() {
+      const min = Math.floor(remainingSeconds / 60);
+      const sec = remainingSeconds % 60;
+      timeDisplay.textContent = `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+      progressCircle.style.strokeDashoffset = CIRCLE_CIRCUMFERENCE * (1 - (remainingSeconds / initialSeconds));
+    }
+
+    function setPreset(sec) {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = null;
+      btnToggle.textContent = "Timer starten";
+      statusDisplay.textContent = "Bereit zum Start";
+      alarmNotice.style.display = "none";
+      initialSeconds = sec;
+      remainingSeconds = sec;
+      document.querySelectorAll(".btn-preset").forEach(btn => {
+        btn.classList.toggle("active", btn.textContent.startsWith(String(sec / 60)));
+      });
+      updateDisplay();
+    }
+
+    function toggleTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        btnToggle.textContent = "Fortsetzen";
+        statusDisplay.textContent = "Pausiert";
+      } else {
+        if ('wakeLock' in navigator) {
+          navigator.wakeLock.request('screen').catch(() => {});
+        }
+        alarmNotice.style.display = "none";
+        statusDisplay.textContent = "Fenster lüftet...";
+        btnToggle.textContent = "Pause";
+        timerInterval = setInterval(() => {
+          if (remainingSeconds > 0) {
+            remainingSeconds--;
+            updateDisplay();
+          } else {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            statusDisplay.textContent = "Fertig gelüftet!";
+            btnToggle.textContent = "Neu starten";
+            alarmNotice.style.display = "block";
+            playBeep();
+            if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 800]);
+          }
+        }, 1000);
+      }
+    }
+
+    function resetTimer() {
+      setPreset(initialSeconds);
+    }
+
+    updateDisplay();
+  </script>
+</body>
+</html>
